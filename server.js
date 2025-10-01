@@ -1,11 +1,11 @@
 const express = require("express");
-const { default: scdlCreate } = require("soundcloud-downloader");
+const scdl = require("soundcloud-downloader").default;
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Використовуємо ваш client_id
-const scdl = scdlCreate({
+const client = scdl.create({
   clientID: "0wlyyut4CpbvbdpJVkjVQExyIYX27qGO",
   saveClientID: false,
 });
@@ -15,11 +15,9 @@ app.get("/stream", async (req, res) => {
   try {
     const { playlists, loop = "true" } = req.query;
     if (!playlists) {
-      return res
-        .status(400)
-        .json({
-          error: 'Missing "playlists" query param (e.g., playlists=url1|url2)',
-        });
+      return res.status(400).json({
+        error: 'Missing "playlists" query param (e.g., playlists=url1|url2)',
+      });
     }
 
     const playlistUrls = playlists.split("|");
@@ -27,7 +25,7 @@ app.get("/stream", async (req, res) => {
 
     // Отримуємо треки з усіх плейлистів
     for (const url of playlistUrls) {
-      const setInfo = await scdl.getSetInfo(url);
+      const setInfo = await client.getSetInfo(url);
       if (setInfo && setInfo.tracks) {
         allTracks = allTracks.concat(setInfo.tracks);
       }
@@ -59,7 +57,7 @@ app.get("/stream", async (req, res) => {
       trackIndex++;
 
       try {
-        const stream = await scdl.download(track.permalink_url);
+        const stream = await client.download(track.permalink_url);
         stream.pipe(res, { end: false });
 
         stream.on("end", () => {
