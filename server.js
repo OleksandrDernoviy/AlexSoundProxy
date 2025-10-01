@@ -23,11 +23,9 @@ app.get("/stream", async (req, res) => {
     // Отримуємо треки з усіх плейлистів
     for (const url of playlistUrls) {
       try {
-        const info = await scdl.getInfo(url, clientID);
-        if (info && info.kind === "playlist" && info.tracks) {
-          allTracks = allTracks.concat(info.tracks);
-        } else if (info && info.kind === "track") {
-          allTracks.push(info);
+        const playlist = await scdl.getPlaylist(url, clientID);
+        if (playlist && playlist.tracks) {
+          allTracks = allTracks.concat(playlist.tracks);
         }
       } catch (err) {
         console.error(`Failed to fetch playlist ${url}:`, err);
