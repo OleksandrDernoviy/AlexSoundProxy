@@ -1,4 +1,5 @@
 const express = require("express");
+const axios = require("axios");
 const scdl = require("soundcloud-downloader");
 
 const app = express();
@@ -20,15 +21,26 @@ app.get("/stream", async (req, res) => {
     const playlistUrls = playlists.split("|");
     let allTracks = [];
 
-    // Отримуємо треки з усіх плейлистів
+    // Отримуємо треки з усіх плейлистів через SoundCloud API
     for (const url of playlistUrls) {
       try {
-        const playlist = await scdl.getPlaylist(url, clientID);
-        if (playlist && playlist.tracks) {
-          allTracks = allTracks.concat(playlist.tracks);
+        const response = await axios.get(
+          "https://api-v2.soundcloud.com/resolve",
+          {
+            params: {
+              url: url,
+              client_id: clientID,
+            },
+          }
+        );
+        const data = response.data;
+        if (data.kind === "playlist" && data.tracks) {
+          allTracks = allTracks.concat(data.tracks);
+        } else if (data.kind === "track") {
+          allTracks.push(data);
         }
       } catch (err) {
-        console.error(`Failed to fetch playlist ${url}:`, err);
+        console.error(`Failed to fetch playlist ${url}:`, err.message);
         continue; // Пропускаємо плейлист, якщо він недоступний
       }
     }
