@@ -1,14 +1,13 @@
 const express = require("express");
 const axios = require("axios");
-const scdl = require("soundcloud-downloader");
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Використовуємо ваш client_id
-const clientID = "emtYgYTYncaCH7HKEAQUQ5SDWmSeQhRT";
+const clientID = "0wlyyut4CpbvbdpJVkjVQExyIYX27qGO";
 
-// Заголовки для симуляції браузера (з вашого мережевого трафіку)
+// Заголовки для симуляції браузера
 const browserHeaders = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0",
@@ -42,7 +41,6 @@ app.get("/stream", async (req, res) => {
     // Отримуємо треки з усіх плейлистів через SoundCloud API
     for (const url of playlistUrls) {
       try {
-        // Використовуємо повний permalink, якщо це короткий URL
         const resolvedUrl = url.includes("on.soundcloud.com")
           ? "https://soundcloud.com/alex-derny/sets/copy-of-sea"
           : url;
@@ -108,10 +106,27 @@ app.get("/stream", async (req, res) => {
 
       try {
         console.log(`Streaming track: ${track.title || "Unknown"}`);
-        const stream = await scdl.download(track.permalink_url, clientID);
-        stream.pipe(res, { end: false });
+        // Отримуємо URL потоку MP3 із transcodings
+        const transcoding = track.media.transcodings.find(
+          (t) =>
+            t.format.protocol === "progressive" &&
+            t.format.mime_type === "audio/mpeg"
+        );
+        if (!transcoding) {
+          throw new Error("No progressive MP3 transcoding found");
+        }
 
-        stream.on("end", () => {
+        const streamResponse = await axios.get(
+          `${transcoding.url}?client_id=${clientID}`,
+          {
+            headers: browserHeaders,
+            responseType: "stream",
+          }
+        );
+
+        streamResponse.data.pipe(res, { end: false });
+
+        streamResponse.data.on("end", () => {
           if (loop === "true" || trackIndex < totalTracks) {
             streamNext();
           } else {
@@ -119,7 +134,7 @@ app.get("/stream", async (req, res) => {
           }
         });
 
-        stream.on("error", (err) => {
+        streamResponse.data.on("error", (err) => {
           console.error("Stream error:", err);
           res.status(500).end();
         });
