@@ -22,7 +22,7 @@ const browserHeaders = {
   "Sec-Fetch-Dest": "empty",
   "Sec-Fetch-Mode": "cors",
   "Sec-Fetch-Site": "same-site",
-  "X-Datadome-ClientId": "315be3ad-a051-4168-817f-e8dacacf7136", // registrationID з вашого трафіку
+  "X-Datadome-ClientId": "315be3ad-a051-4168-817f-e8dacacf7136",
   Priority: "u=4",
 };
 
@@ -42,33 +42,41 @@ app.get("/stream", async (req, res) => {
     // Отримуємо треки з усіх плейлистів через SoundCloud API
     for (const url of playlistUrls) {
       try {
+        // Використовуємо повний permalink, якщо це короткий URL
+        const resolvedUrl = url.includes("on.soundcloud.com")
+          ? "https://soundcloud.com/alex-derny/sets/copy-of-sea"
+          : url;
+
+        console.log(`Fetching playlist: ${resolvedUrl}`);
         const response = await axios.get(
           "https://api-v2.soundcloud.com/resolve",
           {
             params: {
-              url: url,
+              url: resolvedUrl,
               client_id: clientID,
             },
-            headers: browserHeaders, // Додаємо заголовки для обходу DataDome
+            headers: browserHeaders,
           }
         );
         const data = response.data;
+        console.log(`API response for ${resolvedUrl}:`, {
+          kind: data.kind,
+          track_count: data.tracks ? data.tracks.length : 0,
+        });
+
         if (data.kind === "playlist" && data.tracks) {
           allTracks = allTracks.concat(data.tracks);
         } else if (data.kind === "track") {
           allTracks.push(data);
         }
-        console.log(
-          `Fetched ${data.tracks ? data.tracks.length : 1} tracks from ${url}`
-        );
       } catch (err) {
         console.error(
           `Failed to fetch playlist ${url}:`,
           err.response
-            ? err.response.status + " " + err.response.statusText
+            ? `${err.response.status} ${err.response.statusText}`
             : err.message
         );
-        continue; // Пропускаємо плейлист, якщо він недоступний
+        continue;
       }
     }
 
@@ -90,7 +98,6 @@ app.get("/stream", async (req, res) => {
     const totalTracks = allTracks.length;
 
     const streamNext = async () => {
-      // Loop логіка
       if (loop === "false" && trackIndex >= totalTracks) {
         res.end();
         return;
