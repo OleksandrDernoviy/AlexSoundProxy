@@ -1,14 +1,11 @@
 const express = require("express");
-const scdl = require("soundcloud-downloader").default;
+const scdl = require("soundcloud-downloader"); // Змінено імпорт
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Використовуємо ваш client_id
-const client = scdl.create({
-  clientID: "0wlyyut4CpbvbdpJVkjVQExyIYX27qGO",
-  saveClientID: false,
-});
+const clientID = "0wlyyut4CpbvbdpJVkjVQExyIYX27qGO";
 
 // Ендпоінт для стримінгу: /stream?playlists=url1|url2&loop=true
 app.get("/stream", async (req, res) => {
@@ -25,7 +22,7 @@ app.get("/stream", async (req, res) => {
 
     // Отримуємо треки з усіх плейлистів
     for (const url of playlistUrls) {
-      const setInfo = await client.getSetInfo(url);
+      const setInfo = await scdl.getSetInfo(url, clientID);
       if (setInfo && setInfo.tracks) {
         allTracks = allTracks.concat(setInfo.tracks);
       }
@@ -57,7 +54,7 @@ app.get("/stream", async (req, res) => {
       trackIndex++;
 
       try {
-        const stream = await client.download(track.permalink_url);
+        const stream = await scdl.download(track.permalink_url, clientID);
         stream.pipe(res, { end: false });
 
         stream.on("end", () => {
