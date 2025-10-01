@@ -6,7 +6,8 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Використовуємо ваш client_id
-const clientID = "0wlyyut4CpbvbdpJVkjVQExyIYX27qGO";
+// const clientID = "0wlyyut4CpbvbdpJVkjVQExyIYX27qGO";
+const clientID = "0emtYgYTYncaCH7HKEAQUQ5SDWmSeQhRT";
 
 // Ендпоінт для стримінгу: /stream?playlists=url1|url2&loop=true
 app.get("/stream", async (req, res) => {
