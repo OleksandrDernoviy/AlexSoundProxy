@@ -6,8 +6,25 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Використовуємо ваш client_id
-// const clientID = "0wlyyut4CpbvbdpJVkjVQExyIYX27qGO";
-const clientID = "0emtYgYTYncaCH7HKEAQUQ5SDWmSeQhRT";
+const clientID = "emtYgYTYncaCH7HKEAQUQ5SDWmSeQhRT";
+
+// Заголовки для симуляції браузера (з вашого мережевого трафіку)
+const browserHeaders = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0",
+  Accept: "*/*",
+  "Accept-Language": "uk-UA,uk;q=0.8,en-US;q=0.5,en;q=0.3",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  Referer: "https://soundcloud.com/",
+  Origin: "https://soundcloud.com",
+  Connection: "keep-alive",
+  DNT: "1",
+  "Sec-Fetch-Dest": "empty",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Site": "same-site",
+  "X-Datadome-ClientId": "315be3ad-a051-4168-817f-e8dacacf7136", // registrationID з вашого трафіку
+  Priority: "u=4",
+};
 
 // Ендпоінт для стримінгу: /stream?playlists=url1|url2&loop=true
 app.get("/stream", async (req, res) => {
@@ -32,6 +49,7 @@ app.get("/stream", async (req, res) => {
               url: url,
               client_id: clientID,
             },
+            headers: browserHeaders, // Додаємо заголовки для обходу DataDome
           }
         );
         const data = response.data;
@@ -40,8 +58,16 @@ app.get("/stream", async (req, res) => {
         } else if (data.kind === "track") {
           allTracks.push(data);
         }
+        console.log(
+          `Fetched ${data.tracks ? data.tracks.length : 1} tracks from ${url}`
+        );
       } catch (err) {
-        console.error(`Failed to fetch playlist ${url}:`, err.message);
+        console.error(
+          `Failed to fetch playlist ${url}:`,
+          err.response
+            ? err.response.status + " " + err.response.statusText
+            : err.message
+        );
         continue; // Пропускаємо плейлист, якщо він недоступний
       }
     }
@@ -49,6 +75,8 @@ app.get("/stream", async (req, res) => {
     if (allTracks.length === 0) {
       return res.status(404).json({ error: "No tracks found in playlists" });
     }
+
+    console.log(`Total tracks loaded: ${allTracks.length}`);
 
     // Налаштування відповіді як MP3-потік
     res.set({
@@ -72,6 +100,7 @@ app.get("/stream", async (req, res) => {
       trackIndex++;
 
       try {
+        console.log(`Streaming track: ${track.title || "Unknown"}`);
         const stream = await scdl.download(track.permalink_url, clientID);
         stream.pipe(res, { end: false });
 
