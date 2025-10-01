@@ -1,0 +1,25 @@
+{
+  "name": "soundcloud-mp3-proxy",
+  "version": "1.0.0",
+  "description": "Proxy for streaming multiple SoundCloud playlists as MP3 for ESP32/yoRadio",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "soundcloud-downloader": "^0.2.3"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "soundcloud",
+    "mp3",
+    "proxy",
+    "stream",
+    "playlist"
+  ],
+  "author": "Alex Derny (based on Grok setup)",
+  "license": "MIT"
+}
