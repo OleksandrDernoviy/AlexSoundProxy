@@ -1,5 +1,5 @@
 const express = require("express");
-const scdl = require("soundcloud-downloader"); // Змінено імпорт
+const scdl = require("soundcloud-downloader");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -22,9 +22,16 @@ app.get("/stream", async (req, res) => {
 
     // Отримуємо треки з усіх плейлистів
     for (const url of playlistUrls) {
-      const setInfo = await scdl.getSetInfo(url, clientID);
-      if (setInfo && setInfo.tracks) {
-        allTracks = allTracks.concat(setInfo.tracks);
+      try {
+        const info = await scdl.getInfo(url, clientID);
+        if (info && info.kind === "playlist" && info.tracks) {
+          allTracks = allTracks.concat(info.tracks);
+        } else if (info && info.kind === "track") {
+          allTracks.push(info);
+        }
+      } catch (err) {
+        console.error(`Failed to fetch playlist ${url}:`, err);
+        continue; // Пропускаємо плейлист, якщо він недоступний
       }
     }
 
