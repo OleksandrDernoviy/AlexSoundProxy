@@ -25,7 +25,7 @@ const browserHeaders = {
   Priority: "u=4",
 };
 
-// Ендпоінт для стримінгу: /stream?playlists=url1|url2&loop=true
+// Ендпоінт для стрімінгу: /stream?playlists=url1|url2&loop=true
 app.get("/stream", async (req, res) => {
   try {
     const { playlists, loop = "true" } = req.query;
@@ -116,17 +116,28 @@ app.get("/stream", async (req, res) => {
           throw new Error("No progressive MP3 transcoding found");
         }
 
-        const streamResponse = await axios.get(
+        // Запитуємо прямий URL потоку
+        const streamUrlResponse = await axios.get(
           `${transcoding.url}?client_id=${clientID}`,
           {
             headers: browserHeaders,
-            responseType: "stream",
           }
         );
+        const streamUrl = streamUrlResponse.data.url;
+        if (!streamUrl) {
+          throw new Error("No stream URL returned");
+        }
+
+        // Стрімінг MP3
+        const streamResponse = await axios.get(streamUrl, {
+          headers: browserHeaders,
+          responseType: "stream",
+        });
 
         streamResponse.data.pipe(res, { end: false });
 
         streamResponse.data.on("end", () => {
+          console.log(`Finished streaming: ${track.title || "Unknown"}`);
           if (loop === "true" || trackIndex < totalTracks) {
             streamNext();
           } else {
@@ -139,7 +150,7 @@ app.get("/stream", async (req, res) => {
           res.status(500).end();
         });
       } catch (err) {
-        console.error("Download error:", err);
+        console.error("Download error:", err.message);
         res.status(500).end();
       }
     };
