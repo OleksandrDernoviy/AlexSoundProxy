@@ -4,78 +4,65 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Використовуємо client_id із змінної середовища
 const clientID =
   process.env.SOUNDCLOUD_CLIENT_ID || "emtYgYTYncaCH7HKEAQUQ5SDWmSeQhRT";
 
-// Заголовки для симуляції браузера
 const browserHeaders = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0",
   Accept: "*/*",
   "Accept-Language": "uk-UA,uk;q=0.8,en-US;q=0.5,en;q=0.3",
-  "Accept-Encoding": "gzip, deflate, br, zstd",
   Referer: "https://soundcloud.com/",
   Origin: "https://soundcloud.com",
   Connection: "keep-alive",
-  DNT: "1",
-  "Sec-Fetch-Dest": "empty",
-  "Sec-Fetch-Mode": "cors",
-  "Sec-Fetch-Site": "same-site",
-  "X-Datadome-ClientId": "315be3ad-a051-4168-817f-e8dacacf7136",
-  Priority: "u=4",
 };
 
-// Ендпоінт для стримінгу: /stream?playlists=url1|url2&loop=true
+// ICY вставка
+function createIcyMetadata(title) {
+  const text = `StreamTitle='${title || "Unknown"}';`;
+  const length = Math.ceil(text.length / 16);
+  const buffer = Buffer.alloc(1 + length * 16, 0);
+  buffer[0] = length;
+  buffer.write(text, 1);
+  return buffer;
+}
+
 app.get("/stream", async (req, res) => {
   try {
     const { playlists, loop = "true" } = req.query;
     if (!playlists) {
-      return res.status(400).json({
-        error: 'Missing "playlists" query param (e.g., playlists=url1|url2)',
-      });
+      return res
+        .status(400)
+        .json({
+          error: 'Missing "playlists" query param (e.g., playlists=url1|url2)',
+        });
     }
 
     const playlistUrls = playlists.split("|");
     let allTracks = [];
 
-    // Отримуємо треки з усіх плейлистів через SoundCloud API
     for (const url of playlistUrls) {
       try {
         const resolvedUrl = url.includes("on.soundcloud.com")
           ? "https://soundcloud.com/alex-derny/sets/copy-of-sea"
           : url;
 
-        console.log(`Fetching playlist: ${resolvedUrl}`);
         const response = await axios.get(
           "https://api-v2.soundcloud.com/resolve",
           {
-            params: {
-              url: resolvedUrl,
-              client_id: clientID,
-            },
+            params: { url: resolvedUrl, client_id: clientID },
             headers: browserHeaders,
           }
         );
-        const data = response.data;
-        console.log(`API response for ${resolvedUrl}:`, {
-          kind: data.kind,
-          track_count: data.tracks ? data.tracks.length : 0,
-        });
 
+        const data = response.data;
         if (data.kind === "playlist" && data.tracks) {
           allTracks = allTracks.concat(data.tracks);
         } else if (data.kind === "track") {
           allTracks.push(data);
         }
       } catch (err) {
-        console.error(
-          `Failed to fetch playlist ${url}:`,
-          err.response
-            ? `${err.response.status} ${err.response.statusText}`
-            : err.message
-        );
-        continue;
+        console.error("Playlist fetch error:", err.message);
       }
     }
 
@@ -83,23 +70,20 @@ app.get("/stream", async (req, res) => {
       return res.status(404).json({ error: "No tracks found in playlists" });
     }
 
-    console.log(`Total tracks loaded: ${allTracks.length}`);
-
-    // Налаштування відповіді як MP3-потік з ICY metadata для радіо-плеєрів
     res.set({
       "Content-Type": "audio/mpeg",
-      "Transfer-Encoding": "chunked",
       "Cache-Control": "no-cache",
-      "X-Station-Name": "Alex Derny FM",
-      "icy-name": "Alex Derny FM", // Назва станції для yoRadio
-      "icy-description": "SoundCloud Playlist Stream", // Опис
-      "icy-genre": "Various", // Жанр
-      "icy-br": "128", // Бітрейт (приблизний)
-      "icy-pub": "1", // Публічний
+      "icy-name": "Alex Derny FM",
+      "icy-description": "SoundCloud Playlist Stream",
+      "icy-genre": "Various",
+      "icy-br": "128",
+      "icy-pub": "1",
+      "icy-metaint": 16000,
     });
 
     let trackIndex = 0;
     const totalTracks = allTracks.length;
+    const metaint = 16000;
 
     const streamNext = async () => {
       if (loop === "false" && trackIndex >= totalTracks) {
@@ -111,46 +95,48 @@ app.get("/stream", async (req, res) => {
       trackIndex++;
 
       try {
-        console.log(`Streaming track: ${track.title || "Unknown"}`);
-        // Отримуємо URL потоку MP3 із transcodings
         const transcoding = track.media.transcodings.find(
           (t) =>
             t.format.protocol === "progressive" &&
             t.format.mime_type === "audio/mpeg"
         );
-        if (!transcoding) {
+        if (!transcoding)
           throw new Error("No progressive MP3 transcoding found");
-        }
 
-        // Запитуємо прямий URL потоку
         const streamUrlResponse = await axios.get(
           `${transcoding.url}?client_id=${clientID}`,
-          {
-            headers: browserHeaders,
-          }
+          { headers: browserHeaders }
         );
         const streamUrl = streamUrlResponse.data.url;
-        if (!streamUrl) {
-          throw new Error("No stream URL returned");
-        }
+        if (!streamUrl) throw new Error("No stream URL returned");
 
-        // Відправляємо ICY metadata з назвою треку
-        res.write(
-          `icy-metaint: 16000\r\nicy-title: ${
-            track.title || "Unknown Track"
-          }\r\n`
-        );
-
-        // Стрімінг MP3
         const streamResponse = await axios.get(streamUrl, {
           headers: browserHeaders,
           responseType: "stream",
         });
 
-        streamResponse.data.pipe(res, { end: false });
+        const metadata = createIcyMetadata(track.title);
+        let bytesSent = 0;
+
+        streamResponse.data.on("data", (chunk) => {
+          let offset = 0;
+          while (offset < chunk.length) {
+            const remaining = metaint - bytesSent;
+            if (chunk.length - offset >= remaining) {
+              res.write(chunk.slice(offset, offset + remaining));
+              res.write(metadata);
+              offset += remaining;
+              bytesSent = 0;
+            } else {
+              res.write(chunk.slice(offset));
+              bytesSent += chunk.length - offset;
+              offset = chunk.length;
+            }
+          }
+        });
 
         streamResponse.data.on("end", () => {
-          console.log(`Finished streaming: ${track.title || "Unknown"}`);
+          console.log(`Finished streaming: ${track.title}`);
           if (loop === "true" || trackIndex < totalTracks) {
             streamNext();
           } else {
@@ -159,23 +145,22 @@ app.get("/stream", async (req, res) => {
         });
 
         streamResponse.data.on("error", (err) => {
-          console.error("Stream error:", err);
-          res.status(500).end();
+          console.error("Stream error:", err.message);
+          res.end();
         });
       } catch (err) {
         console.error("Download error:", err.message);
-        res.status(500).end();
+        res.end();
       }
     };
 
     await streamNext();
   } catch (error) {
-    console.error("Server error:", error);
+    console.error("Server error:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Health check
 app.get("/", (req, res) => {
   res.json({
     message: "SoundCloud MP3 Proxy is running!",
