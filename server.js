@@ -26,7 +26,7 @@ const browserHeaders = {
   Priority: "u=4",
 };
 
-// Ендпоінт для стримінгу: /stream?playlists=url1|url2&loop=true
+// Ендпоінт для стрімінгу: /stream?playlists=url1|url2&loop=true
 app.get("/stream", async (req, res) => {
   try {
     const { playlists, loop = "true" } = req.query;
@@ -85,17 +85,18 @@ app.get("/stream", async (req, res) => {
 
     console.log(`Total tracks loaded: ${allTracks.length}`);
 
-    // Налаштування відповіді як MP3-потік з ICY metadata для радіо-плеєрів
+    // Налаштування відповіді як MP3-потік з ICY metadata
     res.set({
       "Content-Type": "audio/mpeg",
       "Transfer-Encoding": "chunked",
       "Cache-Control": "no-cache",
       "X-Station-Name": "Alex Derny FM",
-      "icy-name": "Alex Derny FM", // Назва станції для yoRadio
-      "icy-description": "SoundCloud Playlist Stream", // Опис
-      "icy-genre": "Various", // Жанр
-      "icy-br": "128", // Бітрейт (приблизний)
-      "icy-pub": "1", // Публічний
+      "icy-name": "Alex Derny FM",
+      "icy-description": "SoundCloud Playlist Stream",
+      "icy-genre": "Various",
+      "icy-br": "128",
+      "icy-pub": "1",
+      "icy-metaint": "8192", // Зменшено для кращої сумісності
     });
 
     let trackIndex = 0;
@@ -123,6 +124,7 @@ app.get("/stream", async (req, res) => {
         }
 
         // Запитуємо прямий URL потоку
+        console.log(`Fetching stream URL for: ${track.title}`);
         const streamUrlResponse = await axios.get(
           `${transcoding.url}?client_id=${clientID}`,
           {
@@ -133,14 +135,23 @@ app.get("/stream", async (req, res) => {
         if (!streamUrl) {
           throw new Error("No stream URL returned");
         }
+        console.log(`Stream URL: ${streamUrl}`);
 
-        // Відправляємо ICY metadata з назвою треку
-        res.write(
-          `icy-metaint: 16000\r\nicy-title: ${
-            track.title || "Unknown Track"
-          }\r\n`
+        // Відправляємо ICY metadata
+        const metadata = `StreamTitle='${track.title || "Unknown Track"}';`;
+        const metadataLength = Buffer.byteLength(metadata, "utf8");
+        const metadataBuffer = Buffer.alloc(
+          Math.ceil(metadataLength / 16) * 16
         );
-
+        metadataBuffer.write(metadata, 0);
+        metadataBuffer[0] = metadataLength;
+        res.write(
+          Buffer.concat([
+            Buffer.from("StreamTitle="),
+            Buffer.from(metadata),
+            Buffer.from(";"),
+          ])
+        );
         // Стрімінг MP3
         const streamResponse = await axios.get(streamUrl, {
           headers: browserHeaders,
