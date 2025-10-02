@@ -4,8 +4,9 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Використовуємо ваш client_id
-const clientID = "0wlyyut4CpbvbdpJVkjVQExyIYX27qGO";
+// Використовуємо client_id із змінної середовища
+const clientID =
+  process.env.SOUNDCLOUD_CLIENT_ID || "emtYgYTYncaCH7HKEAQUQ5SDWmSeQhRT";
 
 // Заголовки для симуляції браузера
 const browserHeaders = {
