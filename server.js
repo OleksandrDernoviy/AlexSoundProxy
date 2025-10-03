@@ -1,3 +1,5 @@
+// V3
+
 const express = require("express");
 const axios = require("axios");
 const https = require("https");
@@ -5,11 +7,10 @@ const https = require("https");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ⚡ Використовуємо client_id (твій ключ)
+// ⚡ Використовуємо client_id
 const CLIENT_ID =
   process.env.SOUNDCLOUD_CLIENT_ID || "emtYgYTYncaCH7HKEAQUQ5SDWmSeQhRT";
 
-// Плейліст із SoundCloud (повне посилання!)
 const PLAYLIST_URL = "https://soundcloud.com/alex-derny/sets/copy-of-sea";
 
 // HTTPS агент щоб уникнути зависань
@@ -53,12 +54,42 @@ async function getPlaylistTracks(playlistUrl) {
 
 // Отримати стрім URL для треку
 async function getStreamUrl(track) {
-  const transcodings = track.media?.transcodings;
-  const mp3 = transcodings?.find((t) => t.format.protocol === "progressive");
-  if (!mp3) throw new Error("No MP3 stream found");
+  try {
+    let transcodings = track.media?.transcodings;
 
-  const streamRes = await axios.get(`${mp3.url}?client_id=${CLIENT_ID}`);
-  return streamRes.data.url;
+    // Якщо урізаний трек — тягнемо повний опис
+    if (!transcodings || !transcodings.length) {
+      const fullTrackUrl = `https://api-v2.soundcloud.com/tracks/${track.id}?client_id=${CLIENT_ID}`;
+      const fullTrackRes = await axios.get(fullTrackUrl);
+      track = fullTrackRes.data;
+      transcodings = track.media?.transcodings;
+    }
+
+    if (!transcodings || !transcodings.length) {
+      throw new Error("No transcodings available");
+    }
+
+    // шукаємо прогресивний MP3
+    const mp3 = transcodings.find((t) => t.format.protocol === "progressive");
+
+    if (mp3) {
+      const streamRes = await axios.get(`${mp3.url}?client_id=${CLIENT_ID}`);
+      return streamRes.data.url;
+    }
+
+    // якщо є тільки HLS — пропускаємо
+    const hls = transcodings.find((t) => t.format.protocol === "hls");
+    if (hls) {
+      console.warn(
+        `Track "${track.title}" доступний лише через HLS (пропускаю)`
+      );
+      throw new Error("No MP3 stream (HLS only)");
+    }
+
+    throw new Error("No supported stream found");
+  } catch (err) {
+    throw err;
+  }
 }
 
 // Функція перемішування (Fisher–Yates shuffle)
@@ -120,7 +151,7 @@ app.get("/stream", async (req, res) => {
           playNext();
         });
       } catch (err) {
-        console.error("Track error:", err.message);
+        console.error("Track error:", track.title, "-", err.message);
         playNext(); // Пропускаємо проблемний трек
       }
     };
